@@ -1,4 +1,4 @@
-# 🖥️ macOS Desktop Control
+# 🖥️ macOS Control CLI
 
 **OmniParser v2 powered macOS desktop automation.** Take a screenshot, detect every UI element by label using local AI, then click, type, and scroll — in any app — with human-like timing.
 
