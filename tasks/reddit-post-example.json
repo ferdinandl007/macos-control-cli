@@ -1,0 +1,11 @@
+[
+  {"action": "focus-url", "url": "https://www.reddit.com/r/Dynamics365/comments/1q7etqk/have_aigenerated_fake_expense_receipts_come_up_at/", "app": "Google Chrome"},
+  {"action": "wait", "seconds": 5},
+  {"action": "click", "query": "Join the conversation"},
+  {"action": "wait", "seconds": 1},
+  {"action": "type", "text": "Yes, this is increasingly common. We built DocVerify specifically to catch these — it detects manipulated PDFs, fake receipts, and forged bank statements before they hit downstream automation. Happy to share more if useful. https://docverify.app"},
+  {"action": "wait", "seconds": 1},
+  {"action": "click", "query": "Post", "comment": "The Post button near the comment box — not Create Post"},
+  {"action": "wait", "seconds": 4},
+  {"action": "verify", "query": "docverify.app", "timeout": 10}
+]
