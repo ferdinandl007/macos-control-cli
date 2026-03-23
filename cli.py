@@ -3,7 +3,7 @@
 desktop-control CLI — macOS desktop automation via OmniParser v2 + cliclick.
 
 Usage:
-  desktop-control screenshot [--output /tmp/screen.png]
+  desktop-control [--fast] screenshot [--output /tmp/screen.png]
   desktop-control scan [--output /tmp/screen.png] [--json]
   desktop-control find <query> [--screenshot /tmp/existing.png]
   desktop-control click <query_or_coords> [--screenshot /tmp/existing.png]
@@ -67,13 +67,13 @@ def fuzzy_match_elements(elements: list[dict], query: str) -> list[dict]:
 
 
 def cmd_screenshot(args):
-    dc = DesktopControl(screenshot_path=args.output)
+    dc = DesktopControl(screenshot_path=args.output, fast=args.fast)
     path = dc.screenshot()
     print(path)
 
 
 def cmd_scan(args):
-    dc = DesktopControl(screenshot_path=args.output)
+    dc = DesktopControl(screenshot_path=args.output, fast=args.fast)
     dc.screenshot()
     elements = dc.find_all_elements()
 
@@ -92,7 +92,7 @@ def cmd_scan(args):
 
 
 def cmd_find(args):
-    dc = DesktopControl(screenshot_path=args.screenshot)
+    dc = DesktopControl(screenshot_path=args.screenshot, fast=args.fast)
     if not os.path.exists(args.screenshot):
         dc.screenshot()
     elements = dc.find_all_elements()
@@ -120,7 +120,7 @@ def cmd_click(args):
         if len(parts) == 2:
             try:
                 x, y = int(parts[0].strip()), int(parts[1].strip())
-                dc = DesktopControl()
+                dc = DesktopControl(fast=args.fast)
                 dc.click(x, y)
                 print(f"Clicked ({x}, {y})")
                 return
@@ -128,7 +128,7 @@ def cmd_click(args):
                 pass
 
     # Otherwise treat as a label query
-    dc = DesktopControl(screenshot_path=args.screenshot)
+    dc = DesktopControl(screenshot_path=args.screenshot, fast=args.fast)
     if not os.path.exists(args.screenshot):
         dc.screenshot()
     elements = dc.find_all_elements()
@@ -144,7 +144,7 @@ def cmd_click(args):
 
 
 def cmd_type(args):
-    dc = DesktopControl()
+    dc = DesktopControl(fast=args.fast)
     dc.type_text(args.text)
     print(f"Typed {len(args.text)} chars")
 
@@ -157,7 +157,7 @@ def cmd_key(args):
 
 
 def cmd_scroll(args):
-    dc = DesktopControl()
+    dc = DesktopControl(fast=args.fast)
     dc.scroll(args.direction, args.amount)
     print(f"Scrolled {args.direction} x{args.amount}")
 
@@ -166,7 +166,7 @@ def cmd_run_task(args):
     with open(args.taskfile) as f:
         actions = json.load(f)
 
-    dc = DesktopControl()
+    dc = DesktopControl(fast=args.fast)
 
     for i, action in enumerate(actions):
         act = action["action"]
@@ -300,6 +300,8 @@ def main():
         prog="desktop-control",
         description="macOS desktop automation via OmniParser v2 + cliclick",
     )
+    parser.add_argument("--fast", action="store_true",
+                        help="Skip human-simulation delays and curved mouse movement (faster, no bot-detection evasion)")
     sub = parser.add_subparsers(dest="command", required=True)
 
     # screenshot

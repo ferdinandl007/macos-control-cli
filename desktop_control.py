@@ -50,11 +50,19 @@ def _get_display_scale() -> float:
 
 
 class DesktopControl:
-    def __init__(self, screenshot_path: str = "/tmp/screenshot.png", app: str | None = None):
+    def __init__(self, screenshot_path: str = "/tmp/screenshot.png", app: str | None = None, fast: bool = False):
+        """
+        Args:
+            screenshot_path: Where to save screenshots.
+            app: App to focus on init.
+            fast: If True, skip all human-simulation delays and curved mouse movement.
+                  Use for internal automation where bot detection doesn't matter.
+        """
         self.screenshot_path = screenshot_path
         self._elements: list[dict] = []
         self._focused_app = app
         self._scale = _get_display_scale()
+        self._fast = fast
         if app:
             self.focus(app)
 
@@ -201,17 +209,21 @@ class DesktopControl:
         """
         Click at coordinates. Accepts screenshot pixel coords (OmniParser output)
         and automatically converts to logical screen coords for cliclick.
-        Uses natural curved mouse movement to avoid bot detection.
+        In human mode: curved mouse movement + random delays.
+        In fast mode: direct click, no delays.
         """
         lx, ly = self._to_logical(x, y)
-        # Small random offset landing point
-        lx += random.randint(-2, 2)
-        ly += random.randint(-2, 2)
 
-        time.sleep(random.uniform(0.08, 0.25))
-        self._move_human(lx, ly)
-        time.sleep(random.uniform(0.05, 0.12))
-        subprocess.run([CLICLICK, f"c:{lx},{ly}"], check=True)
+        if self._fast:
+            subprocess.run([CLICLICK, f"c:{lx},{ly}"], check=True)
+        else:
+            # Small random offset landing point
+            lx += random.randint(-2, 2)
+            ly += random.randint(-2, 2)
+            time.sleep(random.uniform(0.08, 0.25))
+            self._move_human(lx, ly)
+            time.sleep(random.uniform(0.05, 0.12))
+            subprocess.run([CLICLICK, f"c:{lx},{ly}"], check=True)
 
     def click_element(self, label: str) -> bool:
         """
@@ -232,6 +244,11 @@ class DesktopControl:
         """
         chars_since_pause = 0
         next_pause_at = random.randint(5, 15)
+
+        if self._fast:
+            # Fast mode: type all at once via cliclick
+            subprocess.run([CLICLICK, f"t:{text}"], check=True)
+            return
 
         for char in text:
             # Use cliclick's type command for each character
