@@ -24,29 +24,76 @@ desktop-control --fast click "Submit"   # instant
 desktop-control click "Submit"          # human-like (~2.4s per click)
 ```
 
-## Agent Workflow — How to Use This Skill
+## Agent Workflow — The Core Loop
 
-**Always start with a full scan. Never guess coordinates.**
+**Scan → Act → Scan → Act → Scan → Verify. Repeat until done.**
 
-```bash
-# 1. Navigate and focus
-desktop-control focus-url "https://example.com"
+Every single action must be preceded and followed by a scan. Never assume the screen state — always check.
 
-# 2. Scan the full page — read ALL output, reason about what to click
-desktop-control scan
-
-# 3. From the scan output, pick the right element label and click it
-desktop-control click "Sign in"
-
-# 4. Type, submit, verify
-desktop-control type "your text"
-desktop-control click "Submit"
-desktop-control wait-for "Success" --timeout 10
+```
+SCAN → read all elements → decide what to do
+ACT  → click / type / scroll
+SCAN → confirm the action worked, see what changed
+ACT  → next step
+SCAN → verify final state
 ```
 
-**The scan output is your page map.** Read every element. Pick the label that matches what you want. Never skip the scan and never filter its output — the agent needs full context to make the right decision.
+### Full example — post a comment on Reddit
 
-**Never write Python.** Everything needed is in the CLI. If you feel the urge to write inline Python, use `run-task` with a JSON file instead.
+```bash
+# Step 1: Navigate
+desktop-control focus-url "https://reddit.com/r/example/comments/abc/post_title/"
+
+# Step 2: SCAN — read the full page, find the comment box
+desktop-control scan
+# → read output, find "Join the conversation" or similar
+
+# Step 3: Click the comment box
+desktop-control click "Join the conversation"
+
+# Step 4: SCAN again — confirm the box is active/focused
+desktop-control scan
+# → confirm the text input is ready
+
+# Step 5: Type the comment
+desktop-control type "Your comment here with https://docverify.app"
+
+# Step 6: SCAN again — find the submit button
+desktop-control scan
+# → find "Comment" or "Post" button
+
+# Step 7: Click submit
+desktop-control click "Comment"
+
+# Step 8: SCAN to verify the comment appeared
+desktop-control scan
+# → confirm your comment text is now visible on the page
+```
+
+### Rules
+
+1. **Scan before every action** — never click something you haven't just seen in a scan
+2. **Scan after every action** — confirm the state changed as expected
+3. **Read the full scan output** — every element matters, don't filter or skip
+4. **If something doesn't appear** — scroll and scan again, or wait-for then scan
+5. **Never write Python** — use only CLI commands; use `run-task` for sequences
+6. **Never assume** — the page may have loaded differently, changed, or shown an error
+
+### When things go wrong
+
+```bash
+# Element not found? Scroll down and scan again
+desktop-control scroll down --amount 3
+desktop-control scan
+
+# Page still loading? Wait then scan
+desktop-control wait-for "element you expect" --timeout 15
+desktop-control scan
+
+# Unexpected state? Screenshot to see exactly what happened
+desktop-control screenshot --output /tmp/debug.png
+desktop-control scan
+```
 
 ## CLI (available globally as `desktop-control`)
 
