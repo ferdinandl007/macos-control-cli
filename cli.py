@@ -358,6 +358,10 @@ def main():
     p = sub.add_parser("active-app", help="Print the name of the frontmost application")
     p.set_defaults(func=lambda a: print(DesktopControl().get_focused_app()))
 
+    # display-info
+    p = sub.add_parser("display-info", help="Show detected display configuration")
+    p.set_defaults(func=lambda a: print(DesktopControl().display_info()))
+
     # run-task
     p = sub.add_parser("run-task", help="Run actions from a JSON task file")
     p.add_argument("taskfile", help="Path to JSON task file")

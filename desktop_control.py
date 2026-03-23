@@ -20,10 +20,53 @@ CLICLICK = "/opt/homebrew/bin/cliclick"
 SCREENCAPTURE = "/usr/sbin/screencapture"
 
 
+def _get_display_info() -> dict:
+    """
+    Returns info about all displays:
+    - primary_display: display number of the main screen (1-indexed)
+    - primary_origin: (x, y) logical origin of primary display
+    - primary_size: (w, h) logical size of primary display
+    - scale: HiDPI pixel/logical ratio
+    """
+    try:
+        # Get logical desktop bounds: e.g. "-2048, 0, 2560, 1440" means
+        # secondary at x=-2048..0, primary at x=0..2560
+        result = subprocess.run(
+            ["osascript", "-e", 'tell application "Finder" to get bounds of window of desktop'],
+            capture_output=True, text=True
+        )
+        parts = [int(x.strip()) for x in result.stdout.strip().split(",")]
+        # parts = [left, top, right, bottom] of full desktop space
+        # Primary screen right edge = right bound
+        primary_logical_w = parts[2]
+        primary_logical_h = parts[3]
+
+        # Get screenshot pixel width of primary display
+        from PIL import Image as _Image
+        tmp = "/tmp/_scale_probe.png"
+        subprocess.run([SCREENCAPTURE, "-x", "-D", "1", tmp], check=True, capture_output=True)
+        img = _Image.open(tmp)
+        pixel_w = img.size[0]
+        os.unlink(tmp)
+
+        scale = pixel_w / primary_logical_w if primary_logical_w > 0 else 2.0
+        return {
+            "scale": scale,
+            "primary_logical_w": primary_logical_w,
+            "primary_logical_h": primary_logical_h,
+            "primary_x_offset": 0,  # primary starts at x=0 logical
+            "secondary_x_offset": parts[0],  # negative if secondary is to the left
+        }
+    except Exception as e:
+        import sys as _sys
+        print(f"[desktop-control] Warning: display detection failed ({e}), using defaults", file=_sys.stderr)
+        return {"scale": 2.0, "primary_logical_w": 2560, "primary_logical_h": 1440,
+                "primary_x_offset": 0, "secondary_x_offset": -2048}
+
+
 def _get_display_scale() -> float:
     """
-    Detect the HiDPI scale factor.
-    Screenshot pixels / logical pixels. Typically 2.0 on Retina/4K, 1.0 on 1080p.
+    Detect the HiDPI scale factor for the primary display.
     """
     try:
         result = subprocess.run(
@@ -61,18 +104,40 @@ class DesktopControl:
         self.screenshot_path = screenshot_path
         self._elements: list[dict] = []
         self._focused_app = app
-        self._scale = _get_display_scale()
         self._fast = fast
+        self._display_info = _get_display_info()
+        self._scale = self._display_info["scale"]
+        self._display = 1  # always target primary display
         if app:
             self.focus(app)
 
     # ── Window / App Focus ──────────────────────────────────────────────
 
-    def focus(self, app_name: str) -> None:
-        """Bring an application to the foreground and make it active."""
+    def focus(self, app_name: str, move_to_primary: bool = True) -> None:
+        """
+        Bring an application to the foreground and make it active.
+        If move_to_primary=True (default), moves the front window to the primary display
+        so screenshots always capture it correctly.
+        """
         script = f'tell application "{app_name}" to activate'
         subprocess.run(["osascript", "-e", script], check=True)
-        time.sleep(0.8)
+        time.sleep(0.5)
+
+        if move_to_primary:
+            # Move the front window to origin of primary display (top-left area)
+            # This ensures it's visible on display 1 when we screenshot
+            move_script = f'''
+            tell application "System Events"
+                tell process "{app_name}"
+                    try
+                        set position of front window to {{50, 50}}
+                    end try
+                end tell
+            end tell
+            '''
+            subprocess.run(["osascript", "-e", move_script], capture_output=True)
+
+        time.sleep(0.3)
         self._focused_app = app_name
 
     def focus_url(self, url: str, app_name: str = "Google Chrome") -> None:
@@ -104,6 +169,14 @@ class DesktopControl:
         time.sleep(5)
         self._focused_app = app_name
 
+    def use_display(self, display: int) -> None:
+        """Set which display to screenshot (1=primary, 2=secondary, 0=all combined)."""
+        self._display = display
+
+    def display_info(self) -> dict:
+        """Return detected display configuration."""
+        return self._display_info
+
     def get_focused_app(self) -> str:
         """Return the name of the currently frontmost application."""
         result = subprocess.run(
@@ -112,12 +185,17 @@ class DesktopControl:
         )
         return result.stdout.strip()
 
-    def screenshot(self) -> str:
-        """Capture full screen. Returns the screenshot file path."""
-        subprocess.run(
-            [SCREENCAPTURE, "-x", self.screenshot_path],
-            check=True,
-        )
+    def screenshot(self, display: int = None) -> str:
+        """
+        Capture a screenshot. Defaults to primary display only (-D 1).
+        Pass display=0 to capture all screens combined.
+        Returns the screenshot file path.
+        """
+        d = display if display is not None else self._display
+        if d == 0:
+            subprocess.run([SCREENCAPTURE, "-x", self.screenshot_path], check=True)
+        else:
+            subprocess.run([SCREENCAPTURE, "-x", "-D", str(d), self.screenshot_path], check=True)
         return self.screenshot_path
 
     def find_all_elements(self, fresh_screenshot: bool = False) -> list[dict]:
