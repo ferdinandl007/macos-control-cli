@@ -208,14 +208,17 @@ class DesktopControl:
         self._elements = detect_elements(self.screenshot_path)
         return self._elements
 
-    def find_element(self, label: str) -> dict | None:
+    def find_element(self, label: str, rescan: bool = True) -> dict | None:
         """
-        Find a UI element by label (case-insensitive substring match).
-        Takes a fresh screenshot and re-detects elements.
+        Find a UI element by label (case-insensitive fuzzy match).
+        rescan=True (default): takes a fresh screenshot and re-detects.
+        rescan=False: uses cached elements from the last scan (faster when
+        calling find_element multiple times in a row on the same screen).
         Returns the best match or None.
         """
-        self.screenshot()
-        self._elements = detect_elements(self.screenshot_path)
+        if rescan or not self._elements:
+            self.screenshot()
+            self._elements = detect_elements(self.screenshot_path)
         return self._match_element(label)
 
     def _match_element(self, label: str) -> dict | None:
@@ -303,50 +306,80 @@ class DesktopControl:
             time.sleep(random.uniform(0.05, 0.12))
             subprocess.run([CLICLICK, f"c:{lx},{ly}"], check=True)
 
-    def click_element(self, label: str) -> bool:
+    def click_element(self, label: str, rescan: bool = True) -> bool:
         """
-        Take a screenshot, find the element by label, and click it.
-        Returns True if the element was found and clicked, False otherwise.
+        Find element by label and click it.
+        rescan=False reuses the cached scan — much faster when clicking
+        multiple elements on the same screen without needing a fresh scan.
+        Returns True if found and clicked.
         """
-        el = self.find_element(label)
+        el = self.find_element(label, rescan=rescan)
         if el is None:
             return False
         self.click(el["center_x"], el["center_y"])
         return True
 
+    def scan_and_find(self, *labels: str) -> dict:
+        """
+        Scan once, then find multiple elements from the cache.
+        Returns dict of {label: element_or_None}.
+        Much faster than calling find_element() separately for each.
+
+        Example:
+            results = dc.scan_and_find("Post", "Cancel", "Join the conversation")
+            if results["Join the conversation"]:
+                dc.click(results["Join the conversation"]["center_x"], ...)
+        """
+        self.screenshot()
+        self._elements = detect_elements(self.screenshot_path)
+        return {label: self._match_element(label) for label in labels}
+
     def type_text(self, text: str):
         """
-        Type text character by character with human-like randomized delays.
-        Base delay: 40-140ms per character.
-        Occasional longer pauses: 300-800ms (roughly every 5-15 characters).
-        """
-        chars_since_pause = 0
-        next_pause_at = random.randint(5, 15)
+        Type text with human-like timing.
 
+        Human mode: types word-by-word (not char-by-char) with realistic
+        inter-word delays (80-200ms). Occasional mid-sentence pauses.
+        This is ~5x faster than per-character typing while still looking human.
+
+        Fast mode: single cliclick call, instant.
+        """
         if self._fast:
-            # Fast mode: type all at once via cliclick
             subprocess.run([CLICLICK, f"t:{text}"], check=True)
             return
 
-        for char in text:
-            # Use cliclick's type command for each character
-            # cliclick t: types text, kp: presses a key
-            if char == "\n":
+        # Split into words and type word-by-word for speed + realism
+        # Handle newlines and tabs specially
+        import re
+        tokens = re.split(r'(\n|\t| +)', text)
+        pause_counter = 0
+        next_pause = random.randint(8, 20)  # pause every 8-20 words
+
+        for token in tokens:
+            if not token:
+                continue
+            if token == "\n":
                 subprocess.run([CLICLICK, "kp:return"], check=True)
-            elif char == "\t":
+                time.sleep(random.uniform(0.05, 0.15))
+            elif token == "\t":
                 subprocess.run([CLICLICK, "kp:tab"], check=True)
+                time.sleep(random.uniform(0.05, 0.10))
+            elif token.strip() == "":
+                # spaces — type them and add inter-word delay
+                subprocess.run([CLICLICK, f"t:{token}"], check=True)
+                time.sleep(random.uniform(0.08, 0.20))
             else:
-                subprocess.run([CLICLICK, f"t:{char}"], check=True)
+                # Type the whole word at once
+                subprocess.run([CLICLICK, f"t:{token}"], check=True)
+                pause_counter += 1
 
-            # Base delay
-            delay = random.uniform(0.04, 0.14)
-
-            # Occasional longer pause
-            chars_since_pause += 1
-            if chars_since_pause >= next_pause_at:
-                delay = random.uniform(0.3, 0.8)
-                chars_since_pause = 0
-                next_pause_at = random.randint(5, 15)
+                # Occasional longer pause (thinking)
+                if pause_counter >= next_pause:
+                    time.sleep(random.uniform(0.2, 0.5))
+                    pause_counter = 0
+                    next_pause = random.randint(8, 20)
+                else:
+                    time.sleep(random.uniform(0.03, 0.08))
 
             time.sleep(delay)
 
