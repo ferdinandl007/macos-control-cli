@@ -71,6 +71,26 @@ cd macos-control-cli
 bash setup.sh
 ```
 
+### macOS Permissions (required)
+
+Two permissions must be granted manually in **System Settings → Privacy & Security**:
+
+| Permission | Required for |
+|-----------|-------------|
+| **Screen Recording** | Taking screenshots |
+| **Accessibility** | Mouse movement & keyboard input |
+
+Grant both to your **Terminal app** and to **`/opt/homebrew/bin/cliclick`**.
+
+For background agents (e.g. OpenClaw cron), also grant both to the **`node` binary** at `/opt/homebrew/opt/node@22/bin/node`.
+
+Then verify:
+```bash
+bash check-permissions.sh
+```
+
+Full instructions: [PERMISSIONS.md](PERMISSIONS.md)
+
 This will:
 - Create a Python 3.12 venv at `~/.openclaw/tools/desktop-control/.venv`
 - Install torch, ultralytics, transformers==4.49.0, easyocr, einops, timm
