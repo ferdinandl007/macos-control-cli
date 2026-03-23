@@ -260,6 +260,41 @@ def cmd_run_task(args):
             dc.focus_url(url, app)
             print(f" → navigated {app} to {url}")
 
+        elif act == "find-text":
+            # OCR-only search — fast, no Florence-2
+            from omniparser import detect_elements
+            dc.screenshot()
+            elements = detect_elements(dc.screenshot_path, caption=False)
+            q = action["query"].lower()
+            matches = [e for e in elements if q in e["label"].lower()]
+            if matches:
+                best = sorted(matches, key=lambda x: -x["confidence"])[0]
+                print(f" \"{action['query']}\" → \"{best['label']}\" @ ({best['center_x']}, {best['center_y']})")
+            else:
+                print(f" \"{action['query']}\" → NOT FOUND")
+                if not action.get("optional", False):
+                    sys.exit(1)
+
+        elif act == "wait-for":
+            query = action["query"]
+            timeout = action.get("timeout", 10)
+            interval = action.get("interval", 2.0)
+            deadline = time.time() + timeout
+            found = False
+            while time.time() < deadline:
+                dc.screenshot()
+                elements = dc.find_all_elements()
+                matches = fuzzy_match_elements(elements, query)
+                if matches:
+                    print(f" \"{query}\" → FOUND \"{matches[0]['label']}\"")
+                    found = True
+                    break
+                time.sleep(min(interval, deadline - time.time()))
+            if not found:
+                print(f" \"{query}\" → TIMEOUT")
+                if not action.get("optional", False):
+                    sys.exit(1)
+
         elif act == "wait":
             secs = action.get("seconds", 2)
             print(f" → {secs}s")
@@ -293,6 +328,49 @@ def cmd_run_task(args):
         time.sleep(action.get("delay", 0.5))
 
     print("Task complete.")
+
+
+def cmd_find_text(args):
+    """Find visible text on screen using OCR only — faster than full scan."""
+    from omniparser import detect_elements
+    dc = DesktopControl(screenshot_path=args.screenshot, fast=args.fast)
+    dc.screenshot()
+    # OCR-only: caption=False skips Florence-2, much faster
+    elements = detect_elements(dc.screenshot_path, caption=False)
+    # Filter to OCR text hits only
+    q = args.query.lower()
+    matches = [e for e in elements if q in e["label"].lower()]
+    matches.sort(key=lambda x: -x["confidence"])
+    if not matches:
+        print(f"Text not found: {args.query}", file=sys.stderr)
+        sys.exit(1)
+    best = matches[0]
+    print(f"{best['center_x']},{best['center_y']}")
+    print(f"  \"{best['label']}\" [{best['confidence']:.2f}]", file=sys.stderr)
+
+
+def cmd_wait_for(args):
+    """Wait until element appears on screen, then print its coordinates."""
+    import time as _time
+    from omniparser import detect_elements
+    dc = DesktopControl(fast=args.fast)
+    deadline = _time.time() + args.timeout
+    attempt = 0
+    while _time.time() < deadline:
+        attempt += 1
+        dc.screenshot()
+        elements = dc.find_all_elements()
+        matches = fuzzy_match_elements(elements, args.query)
+        if matches:
+            best = matches[0]
+            print(f"{best['center_x']},{best['center_y']}")
+            print(f"  Found after {attempt} scan(s): \"{best['label']}\"", file=sys.stderr)
+            return
+        remaining = deadline - _time.time()
+        if remaining > 0:
+            _time.sleep(min(args.interval, remaining))
+    print(f"Timeout: \"{args.query}\" not found after {args.timeout}s", file=sys.stderr)
+    sys.exit(1)
 
 
 def main():
@@ -361,6 +439,19 @@ def main():
     # display-info
     p = sub.add_parser("display-info", help="Show detected display configuration")
     p.set_defaults(func=lambda a: print(DesktopControl().display_info()))
+
+    # find-text — search visible text via OCR only (fast, no Florence-2 captioning)
+    p = sub.add_parser("find-text", help="Find visible text on screen using OCR (faster than scan+find)")
+    p.add_argument("query", help="Text to search for")
+    p.add_argument("--screenshot", default="/tmp/screenshot.png")
+    p.set_defaults(func=cmd_find_text)
+
+    # wait-for — wait until an element appears, with timeout
+    p = sub.add_parser("wait-for", help="Wait until an element label appears on screen")
+    p.add_argument("query", help="Element label to wait for")
+    p.add_argument("--timeout", type=int, default=10, help="Max seconds to wait (default 10)")
+    p.add_argument("--interval", type=float, default=2.0, help="Rescan interval in seconds")
+    p.set_defaults(func=cmd_wait_for)
 
     # run-task
     p = sub.add_parser("run-task", help="Run actions from a JSON task file")
