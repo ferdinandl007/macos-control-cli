@@ -24,6 +24,30 @@ desktop-control --fast click "Submit"   # instant
 desktop-control click "Submit"          # human-like (~2.4s per click)
 ```
 
+## Agent Workflow — How to Use This Skill
+
+**Always start with a full scan. Never guess coordinates.**
+
+```bash
+# 1. Navigate and focus
+desktop-control focus-url "https://example.com"
+
+# 2. Scan the full page — read ALL output, reason about what to click
+desktop-control scan
+
+# 3. From the scan output, pick the right element label and click it
+desktop-control click "Sign in"
+
+# 4. Type, submit, verify
+desktop-control type "your text"
+desktop-control click "Submit"
+desktop-control wait-for "Success" --timeout 10
+```
+
+**The scan output is your page map.** Read every element. Pick the label that matches what you want. Never skip the scan and never filter its output — the agent needs full context to make the right decision.
+
+**Never write Python.** Everything needed is in the CLI. If you feel the urge to write inline Python, use `run-task` with a JSON file instead.
+
 ## CLI (available globally as `desktop-control`)
 
 ```bash
