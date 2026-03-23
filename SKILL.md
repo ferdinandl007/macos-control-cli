@@ -14,6 +14,16 @@ Run once:
 bash skills/desktop-control/setup.sh
 ```
 
+## Modes
+
+- **Human mode** (default) — curved mouse movement, randomised delays, per-character typing. Use when posting to Reddit or any site with bot detection.
+- **Fast mode** (`--fast`) — direct clicks, no delays, instant typing. Use for internal automation where bot detection doesn't matter (e.g. checking Gmail, navigating internal tools).
+
+```bash
+desktop-control --fast click "Submit"   # instant
+desktop-control click "Submit"          # human-like (~2.4s per click)
+```
+
 ## CLI (available globally as `desktop-control`)
 
 ```bash
